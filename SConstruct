@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import os
 import sys
-import glob
 
 from methods import print_error
 
@@ -81,140 +80,10 @@ Run the following command to download godot-cpp:
 # Include godot-cpp SConstruct, passing all command-line arguments
 env = SConscript("godot-cpp/SConstruct", {"env": env, "customs": customs})
 
-# Add gRPC configuration
-env.Append(CPPPATH=[
-    '/home/lnTmTnl/.local/include',
-    '/usr/include',
-    '/home/lnTmTnl/gRPC/grpc/third_party/protobuf/src'  # gRPC's protobuf headers
-])
-# 使用pkg-config获取gRPC库依赖
-import subprocess
-
-# 设置PKG_CONFIG_PATH环境变量
-pkg_config_path = '/home/lnTmTnl/.local/lib/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig'
-env['ENV']['PKG_CONFIG_PATH'] = pkg_config_path
-
-# 获取编译标志
-try:
-    cflags = subprocess.check_output(
-        ['pkg-config', '--cflags', 'grpc++', 'absl_flags', 'absl_flags_parse', 'absl_log_initialize'],
-        env={'PKG_CONFIG_PATH': pkg_config_path}
-    ).decode().strip().split()
-    env.Append(CCFLAGS=cflags)
-except Exception as e:
-    print(f"Warning: Failed to get pkg-config cflags: {e}")
-
-# 获取链接标志（静态链接）
-try:
-    # 定义PROTOBUF_ABSL_DEPS（来自gRPC示例）
-    protobuf_absl_deps = [
-        'absl_absl_check', 'absl_absl_log', 'absl_algorithm', 'absl_base',
-        'absl_bind_front', 'absl_bits', 'absl_btree', 'absl_cleanup',
-        'absl_cord', 'absl_core_headers', 'absl_debugging', 'absl_die_if_null',
-        'absl_dynamic_annotations', 'absl_flags', 'absl_flat_hash_map',
-        'absl_flat_hash_set', 'absl_function_ref', 'absl_hash', 'absl_layout',
-        'absl_log_initialize', 'absl_log_severity', 'absl_memory',
-        'absl_node_hash_map', 'absl_node_hash_set', 'absl_optional',
-        'absl_span', 'absl_status', 'absl_statusor', 'absl_strings',
-        'absl_synchronization', 'absl_time', 'absl_type_traits',
-        'absl_utility', 'absl_variant'
-    ]
-    
-    # 构建pkg-config参数
-    pkg_config_args = ['pkg-config', '--libs', '--static', 'protobuf', 'grpc++']
-    pkg_config_args.extend(['absl_flags', 'absl_flags_parse', 'absl_log_initialize'])
-    pkg_config_args.extend(protobuf_absl_deps)
-    
-    ldflags = subprocess.check_output(
-        pkg_config_args,
-        env={'PKG_CONFIG_PATH': pkg_config_path}
-    ).decode().strip().split()
-    
-    # 添加必要的链接标志
-    ldflags.extend(['-pthread', '-Wl,--no-as-needed', '-ldl', '-lrt'])
-    
-    # 在pkg-config的静态库周围添加-Wl,--whole-archive包装器
-    # 包裹absl库和re2库，同时去重
-    new_ldflags = []
-    in_static_section = False
-    seen_libs = set()
-    
-    for flag in ldflags:
-        # 去重：跳过已经见过的库标志
-        if flag.startswith('-l') and flag in seen_libs:
-            continue
-        
-        if flag.startswith('-l'):
-            seen_libs.add(flag)
-        
-        # 检查是否是absl、re2或address_sorting静态库
-        if flag.startswith('-labsl_') or flag == '-lre2' or flag == '-laddress_sorting':
-            if not in_static_section:
-                new_ldflags.append('-Wl,--whole-archive')
-                in_static_section = True
-        elif in_static_section:
-            new_ldflags.append('-Wl,--no-whole-archive')
-            in_static_section = False
-        
-        new_ldflags.append(flag)
-    
-    if in_static_section:
-        new_ldflags.append('-Wl,--no-whole-archive')
-    
-    # 检查是否有libupb.a，如果有则使用-lupb替换所有-lupb_*子库
-    if os.path.exists('/home/lnTmTnl/.local/lib/libupb.a'):
-        # 过滤掉所有-lupb_*子库，添加-lupb
-        filtered_ldflags = []
-        upb_added = False
-        
-        for flag in new_ldflags:
-            if flag.startswith('-lupb_'):
-                # 跳过upb子库
-                continue
-            elif flag == '-Wl,--whole-archive' or flag == '-Wl,--no-whole-archive':
-                # 保留包装器标志
-                filtered_ldflags.append(flag)
-            elif flag.startswith('-labsl_') or flag == '-lre2' or flag == '-laddress_sorting':
-                # 保留absl库、re2库和address_sorting库
-                filtered_ldflags.append(flag)
-            else:
-                # 其他标志
-                filtered_ldflags.append(flag)
-        
-        # 在absl部分后添加-lupb
-        for i, flag in enumerate(filtered_ldflags):
-            if flag == '-Wl,--no-whole-archive':
-                # 在absl部分结束后添加-lupb
-                filtered_ldflags.insert(i, '-lupb')
-                upb_added = True
-                break
-        
-        if not upb_added:
-            # 如果没有找到-Wl,--no-whole-archive，在末尾添加
-            filtered_ldflags.append('-lupb')
-        
-        new_ldflags = filtered_ldflags
-    
-    # 添加到LINKFLAGS
-    env.Append(LINKFLAGS=new_ldflags)
-    
-    # 同时添加到LIBS，确保链接器能找到库
-    env.Append(LIBS=['grpc++', 'grpc', 'gpr', 'protobuf', 'cares', 'ssl', 'crypto', 'z', 'pthread', 'dl', 'rt'])
-    
-except Exception as e:
-    print(f"Warning: Failed to get pkg-config libs: {e}")
-    # 回退到手动配置
-    env.Append(LIBPATH=['/home/lnTmTnl/.local/lib', '/usr/lib/x86_64-linux-gnu'])
-    env.Append(LIBS=['grpc++', 'grpc', 'gpr', 'protobuf', 'cares', 'ssl', 'crypto', 'z', 'pthread', 'dl', 'rt'])
-
-# 添加必要的C++标志
-env.Append(CCFLAGS=['-std=c++17', '-pthread', '-D_REENTRANT', '-fexceptions'])
-
 # Process GDExtension-specific options
 source_dirs = env['source_dirs'].split(',')   # Convert comma-separated string to list
 source_exts = env['source_exts'].split(',')   # Convert comma-separated string to list
 include_dirs = env['include_dirs'].split(',') # Convert comma-separated string to list
-include_dirs.append('src/gen')  # Add generated protobuf headers directory
 doc_output_dir = env['doc_output_dir']        # Directory for documentation output
 precision = env.get('precision', 'single')     # Ensure precision defaults to single
 bundle_id_prefix = env.get('bundle_id_prefix', 'com.gdextension')  # Ensure prefix defaults to com.gdextension
@@ -224,14 +93,6 @@ env.Append(CPPPATH=include_dirs)
 
 # Find all .cpp files recursively in the specified source directories
 sources = find_sources(source_dirs, source_exts)
-
-# Remove generated protobuf files from sources list (they will be added explicitly)
-gen_files_to_exclude = ['src/gen/helloworld.pb.cc', 'src/gen/helloworld.grpc.pb.cc']
-sources = [s for s in sources if s not in gen_files_to_exclude]
-
-# Add generated protobuf source files explicitly
-gen_sources = ['src/gen/helloworld.pb.cc', 'src/gen/helloworld.grpc.pb.cc']
-sources.extend([s for s in gen_sources if os.path.exists(s)])
 
 # Handle documentation generation if applicable
 if env.get("target") in ["editor", "template_debug"]:

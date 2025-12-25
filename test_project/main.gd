@@ -4,4 +4,7 @@ func _ready() -> void:
 	test_plugin()
 	
 func test_plugin() -> void:
-	pass
+	var my_class: Test = Test.new()
+	my_class.say_hello()
+
+	print(my_class.my_data)

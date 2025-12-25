@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="Test" inherits="Node" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://raw.githubusercontent.com/godotengine/godot/master/doc/class.xsd">
+	<brief_description>
+		brief_description
+	</brief_description>
+	<description>
+		description
+	</description>
+	<tutorials>
+		tutorials
+	</tutorials>
+	<methods>
+		<method name="say_hello">
+			<return type="void" />
+			<description>
+				say_hello description
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="my_data" type="String" setter="set_my_data" getter="get_my_data" default="&quot;shitshitshit&quot;">
+			my_data member
+		</member>
+	</members>
+</class>
